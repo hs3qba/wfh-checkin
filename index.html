@@ -225,19 +225,6 @@ textarea{resize:none}
 .config-status.ok{color:var(--emerald)}
 .config-status.no{color:var(--amber)}
 
-/* ===== SYNC BAR ===== */
-.sync-bar{background:#fff;border-bottom:1px solid var(--gray-200);padding:6px 16px;display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap;font-size:.78rem}
-.sync-status{display:flex;align-items:center;gap:6px;color:var(--gray-500)}
-.sync-dot{width:8px;height:8px;border-radius:50%;background:var(--gray-300);flex-shrink:0;transition:background .3s}
-.sync-dot.ok{background:var(--emerald)}
-.sync-dot.err{background:var(--red)}
-.sync-dot.loading{background:var(--amber);animation:pulse 1s infinite}
-.sync-btn{display:inline-flex;align-items:center;gap:5px;padding:4px 12px;border-radius:8px;font-size:.75rem;font-weight:600;font-family:'K2D',sans-serif;cursor:pointer;border:none;background:var(--sky-l);color:var(--sky-d);transition:all .2s}
-.sync-btn:hover:not(:disabled){background:var(--sky);color:#fff}
-.sync-btn:disabled{opacity:.5;cursor:not-allowed}
-.sync-btn svg{width:13px;height:13px;stroke:currentColor;fill:none;stroke-width:2}
-.spin{animation:spin .7s linear infinite}
-
 /* ===== EXPORT ===== */
 .export-bar{display:flex;gap:8px;margin-bottom:16px;flex-wrap:wrap}
 
@@ -300,21 +287,6 @@ footer span{color:var(--gray-300)}
     </button>
   </div>
 </nav>
-
-<!-- SYNC BAR -->
-<div class="sync-bar" id="sync-bar">
-  <div class="sync-status">
-    <span class="sync-dot" id="sync-dot"></span>
-    <span id="sync-msg">ยังไม่ได้ซิงค์ข้อมูล</span>
-  </div>
-  <div style="display:flex;align-items:center;gap:8px">
-    <span id="sync-time" style="color:var(--gray-400);font-size:.72rem"></span>
-    <button class="sync-btn" id="sync-btn" onclick="syncFromGAS()">
-      <svg id="sync-icon" viewBox="0 0 24 24"><polyline points="23 4 23 10 17 10"/><path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"/></svg>
-      ซิงค์จาก Sheets
-    </button>
-  </div>
-</div>
 
 <!-- TOAST -->
 <div id="toast-box"></div>
@@ -393,17 +365,6 @@ footer span{color:var(--gray-300)}
 <!-- CHECK-IN -->
 <div class="page" id="page-checkin">
   <div class="form-wrap">
-    <!-- GAS Config notice -->
-    <div class="config-box" id="ci-config-box">
-      <strong>⚙️ การตั้งค่า Google Sheets</strong>
-      <p style="margin-top:4px">กรุณาใส่ URL ของ Google Apps Script เพื่อบันทึกข้อมูลลง Google Sheets</p>
-      <input type="url" id="gas-url-input" placeholder="https://script.google.com/macros/s/..." spellcheck="false">
-      <div id="gas-status" class="config-status no">
-        <svg style="width:12px;height:12px;stroke:currentColor;fill:none;stroke-width:2" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
-        ยังไม่ได้ตั้งค่า GAS URL
-      </div>
-    </div>
-
     <div class="form-card">
       <div class="form-head sky">
         <h2><svg viewBox="0 0 24 24"><path d="M15 3h4a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2h-4"/><polyline points="10 17 15 12 10 7"/><line x1="15" y1="12" x2="3" y2="12"/></svg>บันทึก Check-in</h2>
@@ -1355,37 +1316,17 @@ async function sendToGAS(url, payload) {
 }
 
 // ============================================================
-// GAS — GET (sync/read all records from Sheets)
+// GAS — GET (auto-sync on load)
 // ============================================================
-function setSyncState(state, msg) {
-  // state: 'loading' | 'ok' | 'err' | 'idle'
-  const dot = document.getElementById('sync-dot');
-  const msgEl = document.getElementById('sync-msg');
-  const btn = document.getElementById('sync-btn');
-  const icon = document.getElementById('sync-icon');
-  dot.className = 'sync-dot ' + (state === 'idle' ? '' : state);
-  msgEl.textContent = msg;
-  btn.disabled = (state === 'loading');
-  icon.classList.toggle('spin', state === 'loading');
-}
-
-function setSyncTime() {
-  const t = getNow();
-  document.getElementById('sync-time').textContent = 'ซิงค์ล่าสุด ' + t.time + ' น.';
-}
 
 // แปลงข้อมูลจาก GAS format → app format
 function gasRecordToApp(r) {
-  // GAS ส่งมา: { id, name, dept, dateDisp, checkinTime, checkoutTime, report, location, status }
-  // เราต้องการเพิ่ม dateKey (YYYY-MM-DD) สำหรับ filter วันนี้
   let dateKey = '';
   if (r.dateDisp) {
-    // dateDisp = DD/MM/YYYY (พ.ศ.) — แปลงเป็น dateKey YYYY-MM-DD
     const parts = r.dateDisp.split('/');
     if (parts.length === 3) {
-      // parts[2] อาจเป็น พ.ศ. (2568) หรือ ค.ศ. (2025) — ตรวจสอบ
       let year = parseInt(parts[2]);
-      if (year > 2500) year = year - 543; // แปลง พ.ศ. → ค.ศ.
+      if (year > 2500) year = year - 543;
       dateKey = `${year}-${parts[1].padStart(2,'0')}-${parts[0].padStart(2,'0')}`;
     }
   }
@@ -1405,47 +1346,19 @@ function gasRecordToApp(r) {
 
 async function syncFromGAS(silent = false) {
   const url = getGasUrl();
-  if (!url) {
-    if (!silent) showToast('กรุณาตั้งค่า GAS URL ก่อนซิงค์', 'error');
-    setSyncState('err', 'ยังไม่ได้ตั้งค่า GAS URL');
-    return;
-  }
-
-  setSyncState('loading', 'กำลังซิงค์ข้อมูลจาก Google Sheets...');
-  if (!silent) showToast('กำลังดึงข้อมูลจาก Sheets...', 'info');
-
+  if (!url) return;
   try {
-    // GAS ต้องการ redirect: follow และไม่ใช้ no-cors สำหรับ GET
-    const res = await fetch(url, {
-      method: 'GET',
-      redirect: 'follow',
-      cache: 'no-cache'
-    });
-
+    const res = await fetch(url, { method: 'GET', redirect: 'follow', cache: 'no-cache' });
     if (!res.ok) throw new Error('HTTP ' + res.status);
-
     const text = await res.text();
-    let json;
-    try {
-      json = JSON.parse(text);
-    } catch(e) {
-      throw new Error('ข้อมูลที่ได้รับไม่ใช่ JSON');
-    }
-
-    if (!json.success) throw new Error(json.error || 'GAS returned error');
-
-    const fetched = (json.records || []).map(gasRecordToApp);
-    records = fetched;
+    const json = JSON.parse(text);
+    if (!json.success) throw new Error(json.error || 'GAS error');
+    records = (json.records || []).map(gasRecordToApp);
     saveRecords();
     refreshAll();
-
-    setSyncState('ok', `ซิงค์สำเร็จ — ${records.length} รายการจาก Google Sheets`);
-    setSyncTime();
     if (!silent) showToast(`ซิงค์สำเร็จ ${records.length} รายการ`, 'success');
-
   } catch(err) {
     console.error('GAS GET error:', err);
-    setSyncState('err', 'ซิงค์ไม่สำเร็จ: ' + err.message);
     if (!silent) showToast('ดึงข้อมูลไม่สำเร็จ: ' + err.message, 'error');
   }
 }
