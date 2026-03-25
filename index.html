@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>WFH Smart Check-in — สพป.นครราชสีมา เขต 6</title>
+<title>WFH Smart Check-in — สพป.นม.6</title>
 <link href="https://fonts.googleapis.com/css2?family=K2D:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
 <style>
 /* ===== RESET & BASE ===== */
@@ -559,7 +559,7 @@ footer span{color:var(--gray-300)}
         <input class="pin-digit" type="password" maxlength="1" inputmode="numeric" id="p3" oninput="pinInput(3)">
       </div>
       <button class="btn btn-sky" onclick="checkPin()">เข้าสู่ระบบ</button>
-      <div style="margin-top:12px;font-size:.73rem;color:var(--gray-300)">PIN เริ่มต้น: **** (เปลี่ยนได้ในโค้ด)</div>
+      <div style="margin-top:12px;font-size:.73rem;color:var(--gray-300)">PIN เริ่มต้น: 1234 (เปลี่ยนได้ในโค้ด)</div>
     </div>
   </div>
 
@@ -1305,53 +1305,34 @@ async function sendToGAS(url, payload) {
 // ============================================================
 
 // แปลงข้อมูลจาก GAS format → app format
-// รองรับทั้ง GAS เก่า (col1=name) และ GAS ใหม่ (col1=ลำดับ)
 function gasRecordToApp(r) {
-  // ตรวจสอบว่า id เป็นชื่อคน (GAS เก่า) หรือลำดับ (GAS ใหม่)
-  const idIsName = r.id && isNaN(r.id) && r.id.length > 3 && !r.id.startsWith('2026') && !r.id.startsWith('20');
-  
-  // ถ้า id เป็นชื่อคน แปลว่า sheet ไม่มีคอลัมน์ลำดับ — เลื่อน field ทั้งหมด
-  const name         = idIsName ? (r.id  || '') : (r.name         || '');
-  const dept         = idIsName ? (r.name || '') : (r.dept         || '');
-  const dateRaw      = idIsName ? (r.dept || '') : (r.dateDisp     || '');
-  const checkinTime  = idIsName ? (r.dateDisp    || '') : (r.checkinTime  || '');
-  const checkoutTime = idIsName ? (r.checkinTime || '') : (r.checkoutTime || '');
-  const location     = idIsName ? (r.checkoutTime|| '') : (r.location     || '');
-  const report       = idIsName ? (r.location    || '') : (r.report       || '');
-  const status       = idIsName ? (r.report      || 'checked-in') : (r.status || 'checked-in');
-
-  // แปลงวันที่ → dateKey YYYY-MM-DD และ dateDisp DD/MM/YYYY
+  // GAS ส่งมาถูกต้องแล้ว: id=ลำดับ, name=ชื่อ, dept=กลุ่มงาน, dateDisp=วันที่, ...
+  // แปลง dateDisp DD/MM/YYYY → dateKey YYYY-MM-DD สำหรับ filter วันนี้
   let dateKey = '';
-  let dateDisp = dateRaw;
-
-  // กรณี GAS ส่งมาเป็น Date object string เช่น "Sun Mar 22 2026 00:00:00 GMT+0700..."
-  if (dateRaw && dateRaw.includes(' ') && !dateRaw.includes('/')) {
-    try {
-      const d = new Date(dateRaw);
-      if (!isNaN(d)) {
-        const dd   = String(d.getDate()).padStart(2,'0');
-        const mm   = String(d.getMonth()+1).padStart(2,'0');
-        const yyyy = d.getFullYear();
-        dateKey  = `${yyyy}-${mm}-${dd}`;
-        dateDisp = `${dd}/${mm}/${yyyy}`;
-      }
-    } catch(e) {}
-  }
-  // กรณี DD/MM/YYYY (พ.ศ. หรือ ค.ศ.)
-  else if (dateRaw && dateRaw.includes('/')) {
-    const parts = dateRaw.split('/');
+  const dateDisp = r.dateDisp || '';
+  if (dateDisp.includes('/')) {
+    const parts = dateDisp.split('/');
     if (parts.length === 3) {
       let year = parseInt(parts[2]);
-      if (year > 2500) year = year - 543;
-      dateKey  = `${year}-${parts[1].padStart(2,'0')}-${parts[0].padStart(2,'0')}`;
-      dateDisp = dateRaw;
+      if (year > 2500) year = year - 543; // พ.ศ. → ค.ศ.
+      dateKey = `${year}-${parts[1].padStart(2,'0')}-${parts[0].padStart(2,'0')}`;
     }
+  } else if (dateDisp.includes('-')) {
+    // กรณี YYYY-MM-DD
+    dateKey = dateDisp.substring(0, 10);
   }
 
   return {
-    id: idIsName ? (name + dateKey) : (r.id || ''),
-    name, dept, location, dateKey, dateDisp,
-    checkinTime, checkoutTime, report, status
+    id:           r.id           || '',
+    name:         r.name         || '',
+    dept:         r.dept         || '',
+    location:     r.location     || '',
+    dateKey,
+    dateDisp,
+    checkinTime:  r.checkinTime  || '',
+    checkoutTime: r.checkoutTime || '',
+    report:       r.report       || '',
+    status:       r.status       || 'checked-in'
   };
 }
 
